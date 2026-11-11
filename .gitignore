@@ -1,0 +1,46 @@
+# Build output
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+.cmake/
+
+# Compiled binaries and libraries
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+/test
+
+# Logs
+logs/
+*.log
+
+# Generated protobuf / gRPC sources (produced by protoc)
+*.pb.h
+*.pb.cc
+*.pb.cpp
+*.pb.go
+
+# IDE and editor files
+.vscode/
+.idea/
+.cursor/
+*.swp
+*~
+
+# Python virtual env / caches
+.venv/
+__pycache__/
+
+# Personal scratch files (not part of the project)
+.bili_tmp/
+.tmp_resume/
+对话孙宇晨_字幕全文.txt
+
+# OS metadata
+.DS_Store
+Thumbs.db

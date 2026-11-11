@@ -1,0 +1,22 @@
+{
+    "servers_name_prefix": "cookrpc",
+    "servers_ip": "0.0.0.0",
+    "servers_port": 8989,
+    "max_connections": 800000,
+    "timeout": 5000,
+    "scheduler": {
+        "zk_namespace": "/cookrpc",
+        "retry_interval": 1000,
+        "zk_host": "localhost",
+        "zk_port": 2181,
+        "load_balance_strategy": "round"
+    },
+    "thread_pool": {
+        "max_threads": 10,
+        "core_threads": 8,
+        "queue_size": 10000,
+        "keep_alive_time": 60
+    },
+    "load_balance_strategy": "round",
+    "register_config": "../config/servers.json"
+}

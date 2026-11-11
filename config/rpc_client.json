@@ -1,0 +1,8 @@
+{
+    "zk_host": "localhost",
+    "zk_port": 2181,
+    "zk_namespace": "/cookrpc/cookrpc_service",
+    "server_port": 8989,
+    "timeout_ms": 3000,
+    "retry_times": 3
+}
