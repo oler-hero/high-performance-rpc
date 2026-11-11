@@ -79,8 +79,14 @@ namespace cookrpc {
      * - 每个子节点的数据存储服务器的IP:Port信息
      * - 异常处理确保函数的健壮性
      */
-    std::vector<std::string> ZkConnHandler::getAllServers(const std::string &zk_namespace)
+    std::vector<std::string> ZkConnHandler::getAllServers(const std::string &zk_namespace, bool *zk_available)
     {
+        // 先假设 ZooKeeper 不可用，只有成功取到子节点列表才置为 true
+        if (zk_available)
+        {
+            *zk_available = false;
+        }
+
         // 确保ZooKeeper连接可用，这是所有操作的前提
         if (!ensureZkConnection())
         {
@@ -131,6 +137,12 @@ namespace cookrpc {
 
             // 释放ZooKeeper分配的内存，防止内存泄漏
             deallocate_String_vector(&children);
+
+            // ZK 可访问：即使列表为空也代表"当前确实没有实例"
+            if (zk_available)
+            {
+                *zk_available = true;
+            }
 
             return servers;
         }
@@ -382,11 +394,27 @@ namespace cookrpc {
      **/
     void ZkConnHandler::updateServersFromZk(const std::string &zk_namespace)
     {
-        auto new_servers = getAllServers(zk_namespace);
+        bool zk_available = false;
+        auto new_servers = getAllServers(zk_namespace, &zk_available);
+
+        // ZooKeeper 暂时不可用：保留上一次成功获取的列表，作为本地缓存兜底
+        if (!zk_available)
         {
             std::lock_guard<std::mutex> lock(servers_mutex_);
-            servers_ = std::move(new_servers);  // 使用move避免不必要的拷贝
+            if (!servers_.empty())
+            {
+                LOG_WARN("ZooKeeper unavailable, keeping cached server list ({} entries)", servers_.size());
+            }
+            else
+            {
+                LOG_ERROR("ZooKeeper unavailable and no cached server list");
+            }
+            return;
         }
+
+        // ZooKeeper 正常：即使返回空列表也更新，表示当前确实没有可用实例
+        std::lock_guard<std::mutex> lock(servers_mutex_);
+        servers_ = std::move(new_servers);
     }
 
     /**

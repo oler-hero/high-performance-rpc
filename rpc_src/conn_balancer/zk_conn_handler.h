@@ -92,7 +92,7 @@ public:
      * 3. 遍历子节点, 使用 zoo_get() 获取节点数据 (IP:Port)
      * 4. 返回服务器地址列表
      */
-    std::vector<std::string> getAllServers(const std::string &zk_namespace);
+    std::vector<std::string> getAllServers(const std::string &zk_namespace, bool *zk_available = nullptr);
 
     /**
      * @brief 获取单个服务器地址 (服务发现 + 负载均衡)

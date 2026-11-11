@@ -1,0 +1,13 @@
+// 这个文件只用于定义业务数据结构
+syntax = "proto3";
+
+package minirpc;
+
+// 示例：Hello服务的请求和响应
+message HelloRequest {
+    string name = 1;
+}
+
+message HelloResponse {
+    string greeting = 1;
+}

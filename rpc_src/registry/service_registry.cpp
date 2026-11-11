@@ -11,7 +11,7 @@ ServiceRegistry::ServiceRegistry(const std::string& zk_hosts)
     zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
 
     zk_handle_ = zookeeper_init(
-        zk_hosts.c_str();
+        zk_hosts.c_str(),
         globalWatcher,
         30000,
         0,

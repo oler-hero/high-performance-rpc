@@ -30,7 +30,7 @@ private:
      * - ZOO_EXPIRED_SESSION_STATE: 会话过期
      * - ZOO_AUTH_FAILED_STATE: 认证失败
      */
-    static void globalWatcher(zhandle_t *zh, int type
+    static void globalWatcher(zhandle_t *zh, int type,
                              int state, const char *path, void* watcherCtx);
 
     bool createNode(const std::string &path, const std::string& data,

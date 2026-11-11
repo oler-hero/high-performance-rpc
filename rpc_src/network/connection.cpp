@@ -131,11 +131,12 @@ namespace cookrpc
      */
     bool Connection::Read()
     {
+        std::lock_guard<std::mutex> lock(io_mutex_);
         // 检查连接状态
         if (state_ != State::CONNECTED)
         {
             LOG_ERROR("Connection is not in CONNECTED state, fd: {}, state: {}", 
-                     fd_, static_cast<int>(state_));
+                     fd_, static_cast<int>(state_.load()));
             return false;
         }
 
@@ -290,11 +291,12 @@ namespace cookrpc
      */
     bool Connection::Write(const std::string &data)
     {
+        std::lock_guard<std::mutex> lock(io_mutex_);
         // 检查连接状态
         if (state_ != State::CONNECTED)
         {
             LOG_ERROR("Connection is not in CONNECTED state for write, fd: {}, state: {}", 
-                     fd_, static_cast<int>(state_));
+                     fd_, static_cast<int>(state_.load()));
             return false;
         }
 
@@ -359,6 +361,7 @@ namespace cookrpc
      */
     void Connection::Close()
     {
+        std::lock_guard<std::mutex> lock(io_mutex_);
         if (fd_ >= 0)
         {
             if (state_ == State::CONNECTED)

@@ -5,6 +5,7 @@
 #include <vector>
 #include <functional>
 #include <atomic>
+#include <mutex>
 #include "rpc_protocol.h"
 #include "log_manager.h"
 
@@ -155,8 +156,9 @@ namespace cookrpc
 
         static const size_t MAX_BUFFER_SIZE = 65536; // 单个缓冲区大小上限（64KB）
 
-        State state_ = State::DISCONNECTED;          // 当前连接状态
-        std::atomic<bool> is_writing_ = false;       // 是否正在写入（防止并发写）
+        std::atomic<State> state_{State::DISCONNECTED}; // 当前连接状态
+        std::atomic<bool> is_writing_ = false;          // 是否正在写入（防止并发写）
+        mutable std::mutex io_mutex_;                   // 保护 fd/状态/写缓冲
     };
 
 } // namespace cookrpc
