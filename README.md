@@ -14,7 +14,7 @@ A C++17 distributed RPC framework built from scratch: a custom binary protocol, 
 
 - **End-to-end, not a single-point demo**: protocol codec → non-blocking networking → priority thread pool → serialization → compression/encryption → service registry/discovery → load balancing.
 - **Reproducible performance**: 50 concurrent clients in a Release build, 60-second steady state on 6 cores at **15.8k QPS / 1.73 ms**; real 2C4G cgroup at **12.6k QPS / 2.77 ms**, 100% success. A no-interval saturation run confirms the 2C4G server saturates both CPU cores, so the bottleneck is the CPU quota, not the client's pacing.
-- **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (774k requests).
+- **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (774k requests). The client reconnect path no longer double-locks a non-recursive mutex, so it recovers about **2 seconds** after a server restart instead of deadlocking.
 - **Pluggable by design**: JSON/Protobuf serialization and `random`/`round`/`weight` load balancing sit behind common interfaces and are selected via configuration.
 
 ## Architecture
@@ -205,7 +205,15 @@ The server's thread pool prints an INFO line inside `enqueue` while holding the 
 
 In the original implementation, `Connection::state_`, `fd_`, and `write_buffer_` were unsynchronized. A worker could be writing a response while the event loop closed the same connection, producing `write error` / `Connection is invalid`. The current implementation makes `state_` atomic and serializes `Read` / `Write` / `Close` with `io_mutex_`; after the fix, a 60-second run on real 2C4G completes with zero failures (774k requests).
 
-### 3. Release vs Debug
+### 3. Client reconnect double-lock
+
+`Call` holds `mutex_` for its whole body, and the `checkConnection()` it invokes reaches `Reconnect() → Disconnect()` when the connection is stale. `Disconnect()` locks the same non-recursive `std::mutex` again, which is undefined behavior and blocks forever under glibc — a server restart would hang the client instead of reconnecting it.
+
+The fix moves the lock boundary to the public entry points: `Connect()` / `Disconnect()` take the lock and delegate to `ConnectLocked()` / `DisconnectLocked()`, while `checkConnection()` uses the unlocked variants because its caller already holds the lock. Read timeouts also mark the connection stale so the next call actually reconnects.
+
+Fault injection: with 10 concurrent clients running, the server was killed with `kill -9` and restarted 40 seconds later; the client resumed within about 2 seconds and the process exited normally instead of hanging.
+
+### 4. Release vs Debug
 
 The original build script used `Debug`, which significantly depresses benchmark numbers. Use `Release` for performance work. On a 2C4G box, start with `core_threads=2~4` instead of the default 8/10 to avoid excessive context switching.
 

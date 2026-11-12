@@ -208,6 +208,12 @@ namespace cookrpc
     bool RpcClient::Connect()
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        return ConnectLocked();
+    }
+
+    // 建立连接：调用方必须已持有 mutex_
+    bool RpcClient::ConnectLocked()
+    {
         if (is_connected_)
         {
             return true;
@@ -273,6 +279,12 @@ namespace cookrpc
     void RpcClient::Disconnect()
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        DisconnectLocked();
+    }
+
+    // 断开连接：调用方必须已持有 mutex_
+    void RpcClient::DisconnectLocked()
+    {
         if (connection_)
         {
             connection_->Close();
@@ -281,23 +293,22 @@ namespace cookrpc
         is_connected_ = false;
     }
 
-    bool RpcClient::Reconnect()
-    {
-        Disconnect();
-        return Connect();
-    }
-
     uint64_t RpcClient::GenerateSequenceId()
     {
         return ++sequence_id_;
     }
 
+    // 调用方（Call）已持有 mutex_，这里直接使用不加锁版本
     bool RpcClient::checkConnection()
     {
-        if (!IsConnected() && !Reconnect())
+        if (!is_connected_)
         {
-            LOG_ERROR("Not connected to server");
-            return false;
+            DisconnectLocked();
+            if (!ConnectLocked())
+            {
+                LOG_ERROR("Not connected to server");
+                return false;
+            }
         }
         return true;
     }

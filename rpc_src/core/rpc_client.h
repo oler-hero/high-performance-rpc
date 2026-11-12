@@ -114,8 +114,10 @@ namespace cookrpc
         bool IsConnected() const { return is_connected_; }
 
     private:
-        // 重连机制
-        bool Reconnect();
+        // 重连在 checkConnection 内完成：调用方已持有 mutex_，
+        // 因此这里使用不加锁的 ConnectLocked / DisconnectLocked，避免重复加锁
+        bool ConnectLocked();
+        void DisconnectLocked();
 
         // 生成请求序列号
         uint64_t GenerateSequenceId();
@@ -184,6 +186,8 @@ namespace cookrpc
             if (!connection_->ReadWithTimeout(timeout_ms_))
             {
                 LOG_ERROR("Failed to read response data within timeout");
+                // 读超时说明连接已不可用，标记断开，下次调用走重连
+                is_connected_ = false;
                 return false;
             }
 
