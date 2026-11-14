@@ -14,7 +14,7 @@ A C++17 distributed RPC framework built from scratch: a custom binary protocol, 
 
 - **End-to-end, not a single-point demo**: protocol codec → non-blocking networking → priority thread pool → serialization → compression/encryption → service registry/discovery → load balancing.
 - **Reproducible performance**: 50 concurrent clients in a Release build, real 2C4G cgroup at **19.4k QPS / 1.51 ms** (1.12M requests, zero failures over 60 seconds), **20.2k QPS** under no-interval saturation with the server saturating both cores; 6-core native at **20.0k QPS / 1.44 ms**, capped by the client's 1 ms pacing.
-- **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (774k requests). The client reconnect path no longer double-locks a non-recursive mutex, so it recovers about **2 seconds** after a server restart instead of deadlocking.
+- **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (1.12M requests, 19.4k QPS). The client reconnect path no longer double-locks a non-recursive mutex, so it recovers about **2 seconds** after a server restart instead of deadlocking.
 - **Pluggable by design**: JSON/Protobuf serialization and `random`/`round`/`weight` load balancing sit behind common interfaces and are selected via configuration.
 
 ## Architecture
@@ -208,7 +208,7 @@ The server's thread pool prints an INFO line inside `enqueue` while holding the 
 
 ### 2. Connection write/close race
 
-In the original implementation, `Connection::state_`, `fd_`, and `write_buffer_` were unsynchronized. A worker could be writing a response while the event loop closed the same connection, producing `write error` / `Connection is invalid`. The current implementation makes `state_` atomic and serializes `Read` / `Write` / `Close` with `io_mutex_`; after the fix, a 60-second run on real 2C4G completes with zero failures (774k requests).
+In the original implementation, `Connection::state_`, `fd_`, and `write_buffer_` were unsynchronized. A worker could be writing a response while the event loop closed the same connection, producing `write error` / `Connection is invalid`. The current implementation makes `state_` atomic and serializes `Read` / `Write` / `Close` with `io_mutex_`; after the fix, a 60-second run on real 2C4G completes with zero failures (1.12M requests, 19.4k QPS).
 
 ### 3. Client reconnect double-lock
 
