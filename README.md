@@ -13,7 +13,7 @@ A C++17 distributed RPC framework built from scratch: a custom binary protocol, 
 ## Highlights
 
 - **End-to-end, not a single-point demo**: protocol codec → non-blocking networking → priority thread pool → serialization → compression/encryption → service registry/discovery → load balancing.
-- **Reproducible performance**: 50 concurrent clients in a Release build, real 2C4G cgroup at **20.3k QPS / 1.39 ms** with 1.17M requests and zero failures over 60 seconds; 6-core steady state at **15.8k QPS / 1.73 ms**. A no-interval saturation run shows the server saturates its 2-core quota, so the bottleneck is CPU, not client pacing.
+- **Reproducible performance**: 50 concurrent clients in a Release build, real 2C4G cgroup at **19.4k QPS / 1.51 ms** (1.12M requests, zero failures over 60 seconds), **20.2k QPS** under no-interval saturation with the server saturating both cores; 6-core native at **20.0k QPS / 1.44 ms**, capped by the client's 1 ms pacing.
 - **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (774k requests). The client reconnect path no longer double-locks a non-recursive mutex, so it recovers about **2 seconds** after a server restart instead of deadlocking.
 - **Pluggable by design**: JSON/Protobuf serialization and `random`/`round`/`weight` load balancing sit behind common interfaces and are selected via configuration.
 
@@ -163,6 +163,9 @@ Test conditions: Release build, 50 concurrent clients, `RpcService/Echo`, JSON s
 | Environment | Requests | QPS | Average | P50 | P90 | P99 | Success |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Real 2C4G (cgroup 2C/4G) | 1,120,245 | 19,444.65 | 1.51 ms | 1.46 ms | — | 4.47 ms | 100% |
+| 6 cores / 7.8 GB WSL2 | 1,141,633 | 19,990.77 | 1.44 ms | 1.42 ms | — | 3.05 ms | 100% |
+
+> The 6-core and 2C4G numbers are close because 50 clients with a 1 ms interval cap throughput near 20k; the 2C4G saturation run also lands at 20.2k, so both configurations are near their limit. Both runs had zero failures and zero payload mismatches.
 
 > The gap between P50 and the average shows typical requests are fast; the mean is pulled up by the tail. On 2C4G the tail comes from CPU-quota scheduling and thread-pool queueing.
 
