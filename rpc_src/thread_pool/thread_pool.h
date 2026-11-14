@@ -16,7 +16,7 @@
 #include <iostream>
 #include <optional>
 
-namespace meeting_ctrl {
+namespace cookrpc::threadpool {
 
 /**
  * @brief 任务优先级枚举
@@ -292,4 +292,4 @@ auto ThreadPool::enqueue(TaskPriority priority, F&& f, Args&&... args)
     return res;
 }
 
-} // namespace meeting_ctrl 
+} // namespace cookrpc::threadpool

@@ -374,15 +374,15 @@ namespace cookrpc
                                              const RpcRequest &request)
     {
         // 确保线程池已初始化（懒加载 + 单例）
-        if (!meeting_ctrl::ThreadPoolSingleton::exists()) {
-            meeting_ctrl::ThreadPoolSingleton::init(std::thread::hardware_concurrency());
+        if (!cookrpc::threadpool::ThreadPoolSingleton::exists()) {
+            cookrpc::threadpool::ThreadPoolSingleton::init(std::thread::hardware_concurrency());
             LOG_INFO("ThreadPool initialized in MessageCycle with {} threads",
                      std::thread::hardware_concurrency());
         }
 
         // 使用高优先级异步处理 RPC 请求
-        auto future = meeting_ctrl::ThreadPoolSingleton::getInstance().enqueue(
-            meeting_ctrl::TaskPriority::HIGH,
+        auto future = cookrpc::threadpool::ThreadPoolSingleton::getInstance().enqueue(
+            cookrpc::threadpool::TaskPriority::HIGH,
             [this, conn, request]() {
                 this->HandleRpcRequestSync(conn, request);
             }

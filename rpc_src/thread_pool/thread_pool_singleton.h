@@ -6,7 +6,7 @@
 #include <chrono>
 #include <future>
 
-namespace meeting_ctrl {
+namespace cookrpc::threadpool {
 
 /**
  * @brief 线程池单例类
@@ -310,4 +310,4 @@ private:
     static std::mutex mutex_;
 };
 
-} // namespace meeting_ctrl 
+} // namespace cookrpc::threadpool

@@ -1,7 +1,7 @@
 
 #include "thread_pool_singleton.h"
 
-namespace meeting_ctrl {
+namespace cookrpc::threadpool {
 
 /**
  * @brief 线程池单例实例的定义
@@ -40,7 +40,7 @@ std::unique_ptr<ThreadPool> ThreadPoolSingleton::instance_;
  */
 std::mutex ThreadPoolSingleton::mutex_;
 
-} // namespace meeting_ctrl
+} // namespace cookrpc::threadpool
 
 /**
  * @note 编程最佳实践

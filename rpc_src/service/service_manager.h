@@ -95,14 +95,14 @@ namespace cookrpc
                                                std::shared_ptr<std::string> result)
         {
             // 确保线程池已初始化（若不存在则创建，线程数 = CPU 核心数）
-            if (!meeting_ctrl::ThreadPoolSingleton::exists()) {
-                meeting_ctrl::ThreadPoolSingleton::init(std::thread::hardware_concurrency());
+            if (!cookrpc::threadpool::ThreadPoolSingleton::exists()) {
+                cookrpc::threadpool::ThreadPoolSingleton::init(std::thread::hardware_concurrency());
                 // LOG_INFO("ThreadPool initialized with {} threads", std::thread::hardware_concurrency());
             }
 
             // 使用高优先级将任务提交到线程池，任务内部调用同步处理函数
-            return meeting_ctrl::ThreadPoolSingleton::getInstance().enqueue(
-                meeting_ctrl::TaskPriority::HIGH,
+            return cookrpc::threadpool::ThreadPoolSingleton::getInstance().enqueue(
+                cookrpc::threadpool::TaskPriority::HIGH,
                 [this, service_name, method_name, args, result]() -> bool {
                     return this->HandleRpcRequestSync(service_name, method_name, args, *result);
                 }
@@ -130,16 +130,16 @@ namespace cookrpc
 
         /**
          * @brief 获取线程池的统计信息（如队列大小、活跃线程数等）
-         * @return meeting_ctrl::ThreadPool::Stats 统计结构体
+         * @return cookrpc::threadpool::ThreadPool::Stats 统计结构体
          * 
          * @note 若线程池未初始化，返回空的 Stats（所有字段为0）
          */
-        meeting_ctrl::ThreadPool::Stats GetThreadPoolStats() const
+        cookrpc::threadpool::ThreadPool::Stats GetThreadPoolStats() const
         {
-            if (meeting_ctrl::ThreadPoolSingleton::exists()) {
-                return meeting_ctrl::ThreadPoolSingleton::getInstance().get_stats();
+            if (cookrpc::threadpool::ThreadPoolSingleton::exists()) {
+                return cookrpc::threadpool::ThreadPoolSingleton::getInstance().get_stats();
             }
-            return meeting_ctrl::ThreadPool::Stats{};
+            return cookrpc::threadpool::ThreadPool::Stats{};
         }
 
     private:

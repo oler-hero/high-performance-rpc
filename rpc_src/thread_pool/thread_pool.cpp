@@ -2,7 +2,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace meeting_ctrl {
+namespace cookrpc::threadpool {
 
 
 
@@ -416,4 +416,4 @@ void ThreadPool::adjust_thread_count() {
     }
 }
 
-} // namespace meeting_ctrl 
+} // namespace cookrpc::threadpool

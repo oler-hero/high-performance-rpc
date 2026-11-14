@@ -51,12 +51,12 @@ void GracefulShutdown()
     
     // 优雅关闭线程池
     LOG_INFO("Shutting down ThreadPool...");
-    if (meeting_ctrl::ThreadPoolSingleton::exists()) {
-        if (meeting_ctrl::ThreadPoolSingleton::shutdown(std::chrono::seconds(10))) {
+    if (cookrpc::threadpool::ThreadPoolSingleton::exists()) {
+        if (cookrpc::threadpool::ThreadPoolSingleton::shutdown(std::chrono::seconds(10))) {
             LOG_INFO("ThreadPool shut down successfully");
         } else {
             LOG_WARN("ThreadPool shutdown timeout, forcing stop");
-            meeting_ctrl::ThreadPoolSingleton::destroy();
+            cookrpc::threadpool::ThreadPoolSingleton::destroy();
         }
     }
     
@@ -111,13 +111,13 @@ int main(int argc, char *argv[])
 
         // 初始化线程池 - 在服务器启动时初始化
         LOG_INFO("Initializing ThreadPool...");
-        meeting_ctrl::ThreadPoolStruct config;
+        cookrpc::threadpool::ThreadPoolStruct config;
         config.core_threads = thread_pool_config->GetCoreThreads();
         config.max_threads = thread_pool_config->GetMaxThreads();
         config.max_queue_size = thread_pool_config->GetQueueSize();
         config.keep_alive_time = std::chrono::seconds(thread_pool_config->GetKeepAliveTime());
 
-        if (!meeting_ctrl::ThreadPoolSingleton::init(config)) { 
+        if (!cookrpc::threadpool::ThreadPoolSingleton::init(config)) { 
             LOG_WARN("ThreadPool already initialized or failed to initialize");
         } else {
             LOG_INFO("ThreadPool initialized successfully with {} threads", config.max_threads);
