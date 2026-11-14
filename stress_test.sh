@@ -238,4 +238,15 @@ if [[ $failed_requests -gt 0 ]]; then
     echo "  - 超时配置"
 fi
 
-echo -e "${GREEN}压测完成！${NC}" 
+echo -e "${GREEN}压测完成！${NC}"
+
+# 输出可直接粘贴到 README 的 Markdown 结果表
+avg_latency=$(awk -F': *' '/^平均响应时间:/{print $2; exit}' "$TEMP_DIR/stress_test.log")
+total_requests=$(awk -F': *' '/^总请求数:/{print $2; exit}' "$TEMP_DIR/stress_test.log")
+avg_latency=${avg_latency:-0}
+total_requests=${total_requests:-0}
+echo
+echo -e "${BLUE}========== Markdown 结果表 ==========${NC}"
+echo "| 环境 | 并发客户端 | 请求数 | QPS | 平均响应 | 成功率 |"
+echo "|---|---:|---:|---:|---:|---:|"
+echo "| $(uname -s) $(nproc)C | $CONCURRENT_CLIENTS | $total_requests | $qps | ${avg_latency}ms | ${success_rate}% |" 

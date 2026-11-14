@@ -13,6 +13,7 @@
 #include "rpc_protocol.h"
 #include "zstd_compress.h"
 #include "aes_encrypt.h"
+#include "framing.h"
 #include "serializer_manager.h"
 #include "log_manager.h"
 #include "error_code.h"
@@ -196,6 +197,16 @@ namespace cookrpc
             if (raw_response_data.empty())
             {
                 LOG_ERROR("No response data received");
+                is_connected_ = false;
+                return false;
+            }
+
+            // 去掉 4 字节长度前缀，取出真正的消息体
+            std::string framed_data = raw_response_data;
+            if (framing::TryDecode(framed_data, raw_response_data) != framing::Status::OK)
+            {
+                LOG_ERROR("Incomplete response frame, buffered size: {}", framed_data.size());
+                is_connected_ = false;
                 return false;
             }
 

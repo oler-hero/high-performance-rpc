@@ -39,10 +39,12 @@ __pycache__/
 # Personal scratch files (not part of the project)
 .bili_tmp/
 .tmp_resume/
+.workbuddy-ai/
 对话孙宇晨_字幕全文.txt
 43题_追问合并版.md
 加练20题.md
 面试题库_最终合并版.md
+面试题库/
 
 # OS metadata
 .DS_Store

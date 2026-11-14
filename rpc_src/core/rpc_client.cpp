@@ -321,7 +321,7 @@ namespace cookrpc
         // CLIENT_INFO("Sending encrypted data, size: {}, fd: {}", 
         //         encrypted_data.size(), connection_->GetFd());
         
-        if (!connection_->Write(encrypted_data))
+        if (!connection_->Write(framing::Encode(encrypted_data)))
         {
             LOG_ERROR("Failed to send request");
             is_connected_ = false;

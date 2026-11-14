@@ -9,6 +9,7 @@
 #include <errno.h>
 #include "zstd_compress.h"
 #include "aes_encrypt.h"
+#include "framing.h"
 #include "thread_pool.h"
 
 namespace cookrpc
@@ -525,8 +526,8 @@ namespace cookrpc
             return;
         }
 
-        // 通过 Connection 写回客户端
-        if (!conn->Write(encrypted_data))
+        // 通过 Connection 写回客户端（加 4 字节长度前缀，便于对端分帧）
+        if (!conn->Write(framing::Encode(encrypted_data)))
         {
             LOG_ERROR("Failed to send {} response: sequence_id={}", response_type, response.getSequenceId());
         }

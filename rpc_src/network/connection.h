@@ -132,6 +132,13 @@ namespace cookrpc
         void HandleMessage(const RpcRequest &request);
 
         /**
+         * @brief 处理一个已完成分帧的消息体：解密 -> 解压 -> 反序列化 -> 回调
+         * @param encrypted_data 去掉长度前缀后的消息体
+         * @return 成功返回 true，失败返回 false
+         */
+        bool HandleFrame(const std::string &encrypted_data);
+
+        /**
          * @brief 处理错误，关闭连接并触发错误日志
          */
         void HandleError();
@@ -141,6 +148,11 @@ namespace cookrpc
          * @return true 发送成功或正在等待，false 发生错误
          */
         bool SendInBuffer();
+
+        /**
+         * @brief 读缓冲区中是否已包含至少一个完整帧
+         */
+        bool HasCompleteFrame() const;
 
         // ---------- 成员变量 ----------
 
@@ -154,7 +166,10 @@ namespace cookrpc
         MessageCallback message_callback_ = nullptr; // 消息到达回调
         CloseCallback close_callback_ = nullptr;     // 连接关闭回调
 
-        static const size_t MAX_BUFFER_SIZE = 65536; // 单个缓冲区大小上限（64KB）
+        // 读缓冲区上限：一个最大帧 + 4 字节长度前缀
+        static const size_t MAX_BUFFER_SIZE = 8 * 1024 * 1024 + 4;
+        // 写缓冲区上限：防止对端长期不消费导致内存无界增长
+        static const size_t MAX_WRITE_BUFFER_SIZE = 16 * 1024 * 1024;
 
         std::atomic<State> state_{State::DISCONNECTED}; // 当前连接状态
         std::atomic<bool> is_writing_ = false;          // 是否正在写入（防止并发写）

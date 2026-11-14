@@ -13,7 +13,7 @@ A C++17 distributed RPC framework built from scratch: a custom binary protocol, 
 ## Highlights
 
 - **End-to-end, not a single-point demo**: protocol codec → non-blocking networking → priority thread pool → serialization → compression/encryption → service registry/discovery → load balancing.
-- **Reproducible performance**: 50 concurrent clients in a Release build, 60-second steady state on 6 cores at **15.8k QPS / 1.73 ms**; real 2C4G cgroup at **12.6k QPS / 2.77 ms**, 100% success. A no-interval saturation run confirms the 2C4G server saturates both CPU cores, so the bottleneck is the CPU quota, not the client's pacing.
+- **Reproducible performance**: 50 concurrent clients in a Release build, real 2C4G cgroup at **20.3k QPS / 1.39 ms** with 1.17M requests and zero failures over 60 seconds; 6-core steady state at **15.8k QPS / 1.73 ms**. A no-interval saturation run shows the server saturates its 2-core quota, so the bottleneck is CPU, not client pacing.
 - **Engineering reliability**: connection state is atomic and `Read`/`Write`/`Close` share a mutex, eliminating the worker-write vs event-loop-close race. After the fix, a 60-second run on real 2C4G completes with **zero failures** (774k requests). The client reconnect path no longer double-locks a non-recursive mutex, so it recovers about **2 seconds** after a server restart instead of deadlocking.
 - **Pluggable by design**: JSON/Protobuf serialization and `random`/`round`/`weight` load balancing sit behind common interfaces and are selected via configuration.
 
@@ -52,7 +52,7 @@ The client serializes the payload, wraps it in an `RpcRequest`, compresses and e
 
 ## Features
 
-- **Custom binary protocol** — a fixed 12-byte header (`magic`, `message_length`, `sequence_id`) keeps framing explicit and leaves room for partial-packet handling and cross-language implementations.
+- **Custom binary protocol** — a fixed 12-byte header (`magic`, `message_length`, `sequence_id`) plus a 4-byte length prefix that frames messages on the wire, so partial and coalesced TCP packets are handled correctly.
 - **Non-blocking event loop** — `epoll` (edge-triggered) on Linux and `kqueue` on macOS; every connection owns independent read/write buffers, and ready sockets are dispatched to the worker pool.
 - **Priority thread pool** — core/max thread counts, a bounded queue, `HIGH`/`NORMAL`/`LOW` priorities, idle-thread reclamation, and graceful shutdown.
 - **Service discovery** — servers create ephemeral nodes under a ZooKeeper namespace; session expiry removes them automatically, and clients re-resolve live instances on reconnect. If ZooKeeper is temporarily unavailable, the client keeps the last successfully fetched instance list as a local cache.
@@ -162,11 +162,11 @@ Test conditions: Release build, 50 concurrent clients, `RpcService/Echo`, JSON s
 
 | Environment | Requests | QPS | Average | P50 | P90 | P99 | Success |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Real 2C4G (cgroup 2C/4G) | 778,104 | 12,587.62 | 2.77 ms | 1.89 ms | 2.61 ms | 23.80 ms | 100% |
+| Real 2C4G (cgroup 2C/4G) | 1,174,710 | 20,299.82 | 1.39 ms | 1.23 ms | 1.64 ms | 9.36 ms | 100% |
 
 > The gap between P50 and the average shows typical requests are fast; the mean is pulled up by the tail. On 2C4G the tail comes from CPU-quota scheduling and thread-pool queueing.
 
-### Log on/off A/B (6 cores and 2C4G)
+### Log on/off A/B (6 cores and 2C4G, measured before the cipher rewrite)
 
 | Environment | Configuration | Requests | QPS | Average latency | Success |
 |---|---|---:|---:|---:|---:|
@@ -184,7 +184,7 @@ Relative improvement:
 
 > On 6 cores, QPS is capped by the client-side 1 ms interval, so the log switch barely moves QPS; average latency is the more sensitive metric. On 2C4G, the log on/off difference is within run-to-run noise, indicating CPU quota—not logging—is the bottleneck. Absolute QPS still depends on CPU model, virtualization, disk, and client placement.
 
-### Saturation run: bottleneck attribution
+### Saturation run: bottleneck attribution (measured before the cipher rewrite)
 
 To check whether the 1 ms interval hides server capacity, a second run removes the interval entirely:
 
@@ -239,7 +239,6 @@ utils/            logging and helpers
 
 ## Limitations and roadmap
 
-- **Partial packets / coalesced packets**: the protocol layer currently assumes one complete message per read. The `message_length` field is already in place; the next step is length-based framing and network byte-order conversion.
 - **ZooKeeper Watch**: discovery currently relies on ephemeral nodes, session timeout, and reconnect-based re-resolution, with the last successfully fetched instance list retained as a local cache when ZooKeeper is unavailable. Watch-based updates and health checks are on the roadmap.
 - **Encryption primitive**: the current implementation uses AES-256-GCM (OpenSSL EVP) with a demo master key; production should load the master key from a secret manager and add ECDH key exchange, key rotation, and replay protection.
 - **Benchmark metrics**: the client reports QPS, average latency, P50/P90/P99, and max latency. CPU/memory usage and longer soak tests are planned.
@@ -247,4 +246,4 @@ utils/            logging and helpers
 
 ## License
 
-No license has been added yet. Add one before distributing or reusing this code.
+Released under the [MIT License](LICENSE).

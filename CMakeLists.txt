@@ -96,8 +96,17 @@ add_executable(stress_test_client
     ${STRESS_TEST_SOURCES}
 )
 
+# 协议与分帧单元测试
+add_executable(rpc_tests
+    ${COMMON_SOURCES}
+    ${CMAKE_SOURCE_DIR}/tests/protocol_test.cpp
+)
+
+enable_testing()
+add_test(NAME protocol_tests COMMAND rpc_tests)
+
 # 设置包含目录和链接库
-foreach(target rpc_server rpc_client stress_test_client)
+foreach(target rpc_server rpc_client stress_test_client rpc_tests)
     target_include_directories(${target} PRIVATE
         ${PROJECT_SOURCE_DIR}
         ${RPC_SOURCE_DIR}

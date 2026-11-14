@@ -4,10 +4,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <chrono>
 
 #include "serializer_manager.h"
 #include "aes_encrypt.h"
 #include "zstd_compress.h"
+#include "framing.h"
 
 namespace cookrpc
 {
@@ -83,12 +85,32 @@ namespace cookrpc
      */
     bool Connection::ReadWithTimeout(int timeout_ms)
     {
+        auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeout_ms);
+
         while (true)
         {
+            // 已经凑够一帧就直接返回，避免多余等待
+            if (HasCompleteFrame())
+            {
+                return true;
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            if (now >= deadline)
+            {
+                LOG_ERROR("read timeout after {} ms, fd: {}, buffered: {}",
+                          timeout_ms, fd_, read_buffer_.size());
+                return false;
+            }
+
+            auto remaining_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
+
             fd_set read_set;
             struct timeval timeout;
-            timeout.tv_sec = timeout_ms / 1000;
-            timeout.tv_usec = (timeout_ms % 1000) * 1000;
+            timeout.tv_sec = remaining_ms / 1000;
+            timeout.tv_usec = (remaining_ms % 1000) * 1000;
 
             // 每次循环都需要重新设置 fd_set
             FD_ZERO(&read_set);
@@ -109,19 +131,40 @@ namespace cookrpc
             if (ret == 0)
             {
                 // 超时
-                LOG_ERROR("read timeout after {} ms, fd: {}", timeout_ms, fd_);
+                LOG_ERROR("read timeout after {} ms, fd: {}, buffered: {}",
+                          timeout_ms, fd_, read_buffer_.size());
                 return false;
             }
 
-            // 有数据可读，调用已有的 Read 函数
+            // 有数据可读，继续累积到读缓冲区
             if (!Read())
             {
                 LOG_ERROR("read failed after select, fd: {}", fd_);
                 return false;
             }
+        }
+    }
 
+    /**
+     * 读缓冲区中是否已包含至少一个完整帧
+     * 长度字段非法时同样返回 true，交由上层解析时报错
+     */
+    bool Connection::HasCompleteFrame() const
+    {
+        if (read_buffer_.size() < 4)
+        {
+            return false;
+        }
+
+        uint32_t net_len = 0;
+        std::memcpy(&net_len, read_buffer_.data(), sizeof(net_len));
+        uint32_t len = ntohl(net_len);
+
+        if (len == 0 || len > framing::MAX_FRAME_SIZE)
+        {
             return true;
         }
+        return read_buffer_.size() >= 4 + static_cast<size_t>(len);
     }
 
     /**
@@ -193,95 +236,102 @@ namespace cookrpc
     }
 
     /**
-     * 处理读缓冲区中的消息：解密 -> 解压 -> 反序列化 -> 回调处理
-     * 注意：此函数假设 read_buffer_ 中存放的是完整的加密数据块（自定义协议）
+     * 处理读缓冲区中的消息：按长度前缀分帧 -> 解密 -> 解压 -> 反序列化 -> 回调处理
+     * 支持 TCP 半包与粘包：不足一帧时等待更多数据，包含多帧时循环处理
      * @return 成功处理或等待更多数据返回 true，失败返回 false
      */
     bool Connection::ProcessMessage()
     {
-        // 检查头部大小是否足够（至少能解析出 RpcHeader）
-        if (read_buffer_.size() >= sizeof(RpcHeader))
+        std::string buffer(read_buffer_.begin(), read_buffer_.end());
+
+        while (true)
         {
-            try
+            std::string encrypted_data;
+            auto status = framing::TryDecode(buffer, encrypted_data);
+
+            if (status == framing::Status::NEED_MORE)
             {
-                // vector<char> 转换为 string（整个缓冲区视为一个加密数据包）
-                std::string encrypted_data(read_buffer_.begin(), read_buffer_.end());
-
-                // // LOG_INFO("ProcessMessage: encrypted_data size: {}, fd: {}", 
-                        // encrypted_data.size(), fd_);
-
-                // 解密数据
-                std::string decrypted_data;
-
-                if (encrypted_data.empty())
-                {
-                    LOG_ERROR("Encrypted data is empty, fd: {}", fd_);
-                    return false;
-                }
-
-                // 使用 AES 解密单例
-                if (!AesEncrypt::getInstance().Decrypt(encrypted_data, decrypted_data))
-                {
-                    LOG_ERROR("Failed to decrypt data, encrypted size: {}, fd: {}",
-                              encrypted_data.size(), fd_);
-                    return false;
-                }
-
-                // // LOG_INFO("ProcessMessage: decrypted_data size: {}, fd: {}", 
-                //         decrypted_data.size(), fd_);
-
-                // 检查解密后的数据
-                if (decrypted_data.empty())
-                {
-                    LOG_ERROR("Decrypted data is empty, fd: {}", fd_);
-                    return false;
-                }
-
-                // 解压数据（Zstd）
-                std::string decompressed_data;
-                if (!ZstdCompress::getInstance().DecompressString(decrypted_data, decompressed_data))
-                {
-                    LOG_ERROR("Failed to decompress data, decrypted size: {}, fd: {}", 
-                             decrypted_data.size(), fd_);
-                    return false;
-                }
-
-                // // LOG_INFO("ProcessMessage: decompressed_data size: {}, fd: {}", 
-                //         decompressed_data.size(), fd_);
-
-                // 检查解压后的数据长度是否足够包含头部
-                if (decompressed_data.size() < sizeof(RpcHeader))
-                {
-                    LOG_DEBUG("Waiting for more data, current size: {}, need: {}",
-                             decompressed_data.size(), sizeof(RpcHeader));
-                    return true; // 数据不完整，等待更多数据（实际上应该返回 true 表示等待）
-                }
-
-                // 反序列化请求对象
-                RpcRequest request;
-                if (!request.Deserialize(decompressed_data))
-                {
-                    LOG_ERROR("Failed to deserialize request body, decompressed size: {}, fd: {}", 
-                             decompressed_data.size(), fd_);
-                    return false;
-                }
-
-                // // LOG_INFO("ProcessMessage: successfully deserialized request, fd: {}", fd_);
-
-                // 处理消息（调用用户注册的回调）
-                HandleMessage(request);
-
-                // 清理已处理的数据（整个加密包已处理完毕）
-                read_buffer_.clear(); // 因为我们已经处理完整个加密数据
+                break; // 剩余数据不足一帧，等待下一次读取
             }
-            catch (const std::exception &e)
+            if (status == framing::Status::INVALID)
             {
-                LOG_ERROR("Error in ProcessMessage: {}, fd: {}", e.what(), fd_);
+                LOG_ERROR("Invalid frame length, fd: {}", fd_);
+                return false;
+            }
+
+            if (!HandleFrame(encrypted_data))
+            {
                 return false;
             }
         }
-        // 头部数据不足，等待更多数据
+
+        // 把尚未消费的残缺帧写回读缓冲区
+        read_buffer_.assign(buffer.begin(), buffer.end());
         return true;
+    }
+
+    /**
+     * 处理单个已分帧的消息体：解密 -> 解压 -> 反序列化 -> 回调
+     */
+    bool Connection::HandleFrame(const std::string &encrypted_data)
+    {
+        try
+        {
+            if (encrypted_data.empty())
+            {
+                LOG_ERROR("Encrypted data is empty, fd: {}", fd_);
+                return false;
+            }
+
+            // 解密数据
+            std::string decrypted_data;
+            if (!AesEncrypt::getInstance().Decrypt(encrypted_data, decrypted_data))
+            {
+                LOG_ERROR("Failed to decrypt data, encrypted size: {}, fd: {}",
+                          encrypted_data.size(), fd_);
+                return false;
+            }
+
+            if (decrypted_data.empty())
+            {
+                LOG_ERROR("Decrypted data is empty, fd: {}", fd_);
+                return false;
+            }
+
+            // 解压数据（Zstd）
+            std::string decompressed_data;
+            if (!ZstdCompress::getInstance().DecompressString(decrypted_data, decompressed_data))
+            {
+                LOG_ERROR("Failed to decompress data, decrypted size: {}, fd: {}",
+                          decrypted_data.size(), fd_);
+                return false;
+            }
+
+            if (decompressed_data.size() < sizeof(RpcHeader))
+            {
+                LOG_ERROR("Decompressed data too small, size: {}, fd: {}",
+                          decompressed_data.size(), fd_);
+                return false;
+            }
+
+            // 反序列化请求对象
+            RpcRequest request;
+            if (!request.Deserialize(decompressed_data))
+            {
+                LOG_ERROR("Failed to deserialize request body, decompressed size: {}, fd: {}",
+                          decompressed_data.size(), fd_);
+                return false;
+            }
+
+            // 处理消息（调用用户注册的回调）
+            HandleMessage(request);
+            return true;
+        }
+        catch (const std::exception &e)
+        {
+            LOG_ERROR("Error in HandleFrame: {}, fd: {}", e.what(), fd_);
+            return false;
+        }
     }
 
     /**
@@ -303,6 +353,15 @@ namespace cookrpc
         if (data.empty())
         {
             LOG_ERROR("write data is empty, fd: {}", fd_);
+            return false;
+        }
+
+        // 写缓冲上限保护：对端长期不读时避免内存无界增长
+        if (write_buffer_.size() + data.size() > MAX_WRITE_BUFFER_SIZE)
+        {
+            LOG_ERROR("write buffer overflow, fd: {}, buffered: {}, incoming: {}",
+                      fd_, write_buffer_.size(), data.size());
+            state_ = State::DISCONNECTED;
             return false;
         }
 

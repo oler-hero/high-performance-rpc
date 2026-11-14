@@ -50,6 +50,7 @@ struct StressTestConfig {
     int concurrent_clients = 10;      // 并发客户端数量
     int test_duration_seconds = 0;    // 测试时长（秒），0表示按请求数测试
     int interval_ms = 1;              // 每请求后的间隔（毫秒），0表示不等待（饱和压测）
+    int payload_bytes = 0;            // 附加负载大小（字节），用于验证大报文分帧
     std::string server_config = "/usr/team_project/rpc-tutorial/config/rpc_client.json"; // 这里建议配置成相对路径
     bool verbose = false;             // 是否显示详细日志
 };
@@ -61,7 +62,7 @@ struct StressTestConfig {
  * @param verbose 是否输出详细日志
  */
 void performSingleRequest(RpcClient& client, int request_id, bool verbose,
-                          std::vector<long long>& latencies) {
+                          std::vector<long long>& latencies, int payload_bytes = 0) {
     // 记录请求开始时间
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -71,6 +72,19 @@ void performSingleRequest(RpcClient& client, int request_id, bool verbose,
         request["message"] = "stress test request " + std::to_string(request_id);
         request["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
+
+        // 需要验证大报文分帧时，填充一段近似随机的数据，避免被压缩后变小
+        if (payload_bytes > 0)
+        {
+            std::string pad(static_cast<size_t>(payload_bytes), 'x');
+            uint32_t seed = 2463534242u + static_cast<uint32_t>(request_id);
+            for (auto &ch : pad)
+            {
+                seed = seed * 1103515245u + 12345u;
+                ch = static_cast<char>('a' + (seed >> 16) % 26);
+            }
+            request["payload_pad"] = pad;
+        }
         
         json response;
         // 调用RPC服务的Echo方法
@@ -140,7 +154,8 @@ void clientWorker(int worker_id, const StressTestConfig& config) {
             int request_id = 0;
             // 在指定时间内持续发送请求
             while (std::chrono::steady_clock::now() < end_time) {
-                performSingleRequest(client, worker_id * 100000 + request_id, config.verbose, local_latencies);
+                performSingleRequest(client, worker_id * 100000 + request_id, config.verbose,
+                                     local_latencies, config.payload_bytes);
                 request_id++;
                 
                 // 请求间隔：0 表示不等待，用于测服务端饱和吞吐
@@ -158,7 +173,8 @@ void clientWorker(int worker_id, const StressTestConfig& config) {
             
             // 发送指定数量的请求
             for (int i = 0; i < requests_per_client; i++) {
-                performSingleRequest(client, worker_id * 100000 + i, config.verbose, local_latencies);
+                performSingleRequest(client, worker_id * 100000 + i, config.verbose,
+                                     local_latencies, config.payload_bytes);
                 
                 // 请求间隔：0 表示不等待，用于测服务端饱和吞吐
                 if (config.interval_ms > 0) {
@@ -195,6 +211,7 @@ void showHelp(const char* program_name) {
     std::cout << "  -c, --clients NUM      并发客户端数 (默认: 10)" << std::endl;
     std::cout << "  -t, --time SECONDS     测试时长(秒), 0表示按请求数测试 (默认: 0)" << std::endl;
     std::cout << "  -i, --interval MS      每请求后的间隔(毫秒), 0表示不等待/饱和压测 (默认: 1)" << std::endl;
+    std::cout << "  -s, --size BYTES       附加负载大小(字节), 用于验证大报文分帧 (默认: 0)" << std::endl;
     std::cout << "  -f, --config FILE      客户端配置文件 (默认: ../config/rpc_client.json)" << std::endl;
     std::cout << "  -v, --verbose          显示详细日志" << std::endl;
     std::cout << "  -h, --help             显示帮助信息" << std::endl;
@@ -232,6 +249,10 @@ StressTestConfig parseArgs(int argc, char* argv[]) {
         } else if (arg == "-i" || arg == "--interval") {
             if (i + 1 < argc) {
                 config.interval_ms = std::stoi(argv[++i]);
+            }
+        } else if (arg == "-s" || arg == "--size") {
+            if (i + 1 < argc) {
+                config.payload_bytes = std::stoi(argv[++i]);
             }
         } else if (arg == "-f" || arg == "--config") {
             if (i + 1 < argc) {
@@ -288,6 +309,7 @@ int main(int argc, char* argv[]) {
         }
         std::cout << "并发客户端: " << config.concurrent_clients << std::endl;
         std::cout << "请求间隔: " << config.interval_ms << " ms" << std::endl;
+        std::cout << "附加负载: " << config.payload_bytes << " 字节" << std::endl;
         std::cout << "服务器配置: " << config.server_config << std::endl;
         std::cout << "=============================" << std::endl;
         
