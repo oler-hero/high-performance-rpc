@@ -42,7 +42,7 @@ double Percentile(const std::vector<long long> &sorted, double p)
 }
 
 /**
- * @brief 压测配置结构体，具体参数自己配置哈
+ * @brief 压测配置结构体，包含压测所需的全部参数
  * @description 包含所有压测相关的配置参数
  */
 struct StressTestConfig {

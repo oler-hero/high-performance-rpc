@@ -150,7 +150,7 @@ public:
     auto enqueue(TaskPriority priority, F&& f, Args&&... args) 
         -> std::future<typename std::invoke_result<F, Args...>::type>;
 
-    // 暂停线程池，本项目中没使用相关操作，大家可以自己思考应用场景
+    // 暂停线程池：暂停后工作线程不取新任务，但保持存活
     void pause();
 
     // 恢复线程池
@@ -228,7 +228,7 @@ private:
 
 /**
  * @brief 模板方法实现 - 任务提交
- * @details 这是线程池的核心功能，用到的技术有，类型推导，完美转发，异步结果，背压控制等，还支持动态扩容，大家可以详细阅读代码和注释
+ * @details 线程池核心接口：类型推导、完美转发、异步结果、背压控制与动态扩容
  */
 template<class F, class... Args>
 auto ThreadPool::enqueue(TaskPriority priority, F&& f, Args&&... args) 

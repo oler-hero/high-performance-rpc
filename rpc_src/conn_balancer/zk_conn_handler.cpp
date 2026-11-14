@@ -319,17 +319,16 @@ namespace cookrpc {
      * 服务发现和负载均衡的入口函数：
      * 1. 更新服务器列表 - 确保使用最新的服务器信息
      * 2. 负载均衡选择 - 使用负载均衡算法选择服务器
-     * 3. 异常处理 - 无可用服务器时的处理，各位也可以换成错误码哈
+     * 3. 异常处理 - 无可用服务器时返回空字符串
      * 
      * 设计考虑：
      * - 每次调用都更新服务器列表，确保实时性
-     * - 后期可优化为定期更新+缓存机制，训练营的 meeting 后端项目是采用的这种方式，需要的可以查看一下
+     * - ZooKeeper 不可用时沿用最近一次成功获取的列表，作为本地缓存兜底
      * - 使用单例的负载均衡器，保持状态一致性
      */
     std::string ZkConnHandler::getServer(const std::string &zk_namespace)
     {
         // 每次访问前更新服务器列表，确保使用最新信息
-        // 注释说明了后期可优化为定时更新+内存缓存模式
         updateServersFromZk(zk_namespace);
         std::lock_guard<std::mutex> lock(servers_mutex_);
         
@@ -360,7 +359,7 @@ namespace cookrpc {
      */
     void ZkConnHandler::cleanup()
     {
-        // 通过原子标志确保在多线程环境中清理操作只被执行一次，各位也可以去了解一下其应用场景
+        // 通过原子标志确保清理操作在多线程环境下只执行一次
         static std::atomic<bool> cleanup_done{false};
         if (cleanup_done.exchange(true)) {
             return;
@@ -526,13 +525,12 @@ namespace cookrpc {
      * @param registry_config 服务注册配置
      * @return 注册是否成功
      * 
-     * 这块其实是为了测试负载均衡而存在，注册了多个相同的机器（使用了外网 ip 和 0.0.0.0 的 ip）
-     * 可以将 rpc server 部署在不同的机器上
-     * client 通过负载均衡器来选择不同的机器
+     * 示例配置注册了多个地址（外网 IP 与 0.0.0.0），用于演示多实例注册与负载均衡；
+     * 实际部署时每个实例应使用各自的地址
      */
     bool ZkConnHandler::registerServicesFromConfig(const cookrpc::ServiceRegistryConfig* registry_config)
     {
-        // 没有配置不算错误，某些服务可能不需要注册到ZooKeeper，这块各位可以看自己的需求
+        // 未配置注册节点不算错误：部分服务不需要注册到 ZooKeeper
         if (!registry_config || registry_config->GetRegistryNodesSize() == 0)
         {
             LOG_WARN("No registry configuration found, skipping ZooKeeper registration");

@@ -108,7 +108,7 @@ void ThreadPool::worker_thread() {
             
             /**
              * 暂停状态处理
-             * 在暂停状态下，线程不处理任务但保持存活，目前项目中没有用到，各位可以执行拓展
+             * 在暂停状态下，线程不处理任务但保持存活
              */
             if(state_ == ThreadPoolState::PAUSED) {
                 continue;

@@ -13,6 +13,10 @@ OUTPUT_FILE="stress_test_results.txt"  # 结果输出文件
 BUILD_DIR="build"        # 构建目录
 VERBOSE=false            # 是否显示详细日志
 
+# 客户端配置文件：默认使用仓库内的 config/rpc_client.json
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/config/rpc_client.json"
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -160,9 +164,9 @@ START_TIME=$(date +%s)
 TOTAL_REQUESTS=$((CONCURRENT_CLIENTS * REQUESTS_PER_CLIENT))
 
 # 构建压测客户端参数
-CLIENT_ARGS="-c $CONCURRENT_CLIENTS -n $TOTAL_REQUESTS"
+CLIENT_ARGS="-c $CONCURRENT_CLIENTS -f $CONFIG_FILE -n $TOTAL_REQUESTS"
 if [[ $TEST_DURATION -gt 0 ]]; then
-    CLIENT_ARGS="-c $CONCURRENT_CLIENTS -t $TEST_DURATION"
+    CLIENT_ARGS="-c $CONCURRENT_CLIENTS -f $CONFIG_FILE -t $TEST_DURATION"
 fi
 
 if [[ "$VERBOSE" == "true" ]]; then
@@ -184,9 +188,17 @@ else
     echo -e "${RED}压测失败，退出码: $TEST_EXIT_CODE${NC}"
 fi
 
-# 显示结果
+# 从压测客户端输出中提取关键指标（失败时可能为空，做默认值保护）
+success_rate=$(awk -F': *' '/^成功率:/{gsub(/%/,"",$2); print $2; exit}' "$TEMP_DIR/stress_test.log")
+qps=$(awk -F': *' '/^QPS:/{print $2; exit}' "$TEMP_DIR/stress_test.log")
+failed_requests=$(awk -F': *' '/^失败请求:/{print $2; exit}' "$TEMP_DIR/stress_test.log")
+success_rate=${success_rate:-0}
+qps=${qps:-0}
+failed_requests=${failed_requests:-0}
+
+# 显示结果（只打印结果块，避免逐请求日志刷屏）
 echo -e "${BLUE}========== 压测结果 ==========${NC}"
-cat "$TEMP_DIR/stress_test.log"
+sed -n '/压测结果/,/^=============================/p' "$TEMP_DIR/stress_test.log"
 
 # 保存详细结果到文件
 {
@@ -208,11 +220,11 @@ echo -e "${GREEN}详细结果已保存到: $OUTPUT_FILE${NC}"
 
 # 提供优化建议
 echo -e "${BLUE}========== 优化建议 ==========${NC}"
-if [[ $(echo "$success_rate < 95" | bc -l) -eq 1 ]]; then
+if awk -v s="$success_rate" 'BEGIN{exit !(s < 95)}'; then
     echo -e "${RED}• 成功率偏低，建议检查服务器性能和网络连接${NC}"
 fi
 
-if [[ $(echo "$qps < 100" | bc -l) -eq 1 ]]; then
+if awk -v q="$qps" 'BEGIN{exit !(q < 100)}'; then
     echo -e "${YELLOW}• QPS较低，可以尝试：${NC}"
     echo "  - 增加服务器线程池大小"
     echo "  - 优化网络配置"
