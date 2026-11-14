@@ -24,6 +24,7 @@ find_package(absl CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(zstd CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
 # ZooKeeper C client:
@@ -122,6 +123,7 @@ foreach(target rpc_server rpc_client stress_test_client)
         nlohmann_json::nlohmann_json
         spdlog::spdlog
         ${RPC_ZOOKEEPER_LIBS}
+        OpenSSL::Crypto
         Threads::Threads
         ${CMAKE_DL_LIBS}
         rt

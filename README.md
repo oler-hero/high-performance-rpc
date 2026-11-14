@@ -58,7 +58,7 @@ The client serializes the payload, wraps it in an `RpcRequest`, compresses and e
 - **Service discovery** — servers create ephemeral nodes under a ZooKeeper namespace; session expiry removes them automatically, and clients re-resolve live instances on reconnect. If ZooKeeper is temporarily unavailable, the client keeps the last successfully fetched instance list as a local cache.
 - **Load balancing** — random, round-robin, and weighted round-robin strategies behind a common interface, selectable from configuration.
 - **Pluggable serialization** — JSON (`nlohmann/json`) and Protobuf backends chosen at runtime, with compile-time type checks.
-- **Compression and encryption** — configurable Zstd compression; each message uses a random session key wrapped by a master key, then Base64-encoded. The current primitive is a teaching-oriented shift cipher and should be replaced with **ECDH + AES-256-GCM** in production.
+- **Compression and encryption** — configurable Zstd compression; each message uses a random 256-bit session key wrapped by a master key, then encrypted with **AES-256-GCM** (OpenSSL EVP) and Base64-encoded. This is two-layer symmetric encryption, not hybrid encryption; production should add **ECDH** key exchange plus key rotation and replay protection.
 - **Hardened connection lifecycle** — `Connection::state_` is atomic and `Read`/`Write`/`Close` share `io_mutex_`, preventing a worker from writing a response while the event loop closes the same connection.
 - **Configuration-driven** — server, client, thread pool, and registry settings are loaded at startup without recompilation.
 - **Graceful shutdown** — `SIGINT`/`SIGTERM` stops the event loop, closes connections, drains the thread pool, and cleans up ZooKeeper.
@@ -69,7 +69,7 @@ The client serializes the payload, wraps it in an `RpcRequest`, compresses and e
 ### Requirements
 
 - CMake 3.15+ and a C++17 compiler (GCC 9+, Clang 10+)
-- [vcpkg](https://github.com/microsoft/vcpkg) with `protobuf`, `nlohmann-json`, `spdlog`, `zstd`, and `zookeeper`
+- [vcpkg](https://github.com/microsoft/vcpkg) with `protobuf`, `nlohmann-json`, `spdlog`, `zstd`, `openssl`, and `zookeeper`
 - A threaded ZooKeeper C client (`libzookeeper_mt`) that exposes the synchronous API
 - A running ZooKeeper instance (default `localhost:2181`)
 
@@ -241,7 +241,7 @@ utils/            logging and helpers
 
 - **Partial packets / coalesced packets**: the protocol layer currently assumes one complete message per read. The `message_length` field is already in place; the next step is length-based framing and network byte-order conversion.
 - **ZooKeeper Watch**: discovery currently relies on ephemeral nodes, session timeout, and reconnect-based re-resolution, with the last successfully fetched instance list retained as a local cache when ZooKeeper is unavailable. Watch-based updates and health checks are on the roadmap.
-- **Encryption primitive**: the current implementation is teaching-oriented; production should use ECDH + AES-256-GCM with key rotation and replay protection.
+- **Encryption primitive**: the current implementation uses AES-256-GCM (OpenSSL EVP) with a demo master key; production should load the master key from a secret manager and add ECDH key exchange, key rotation, and replay protection.
 - **Benchmark metrics**: the client reports QPS, average latency, P50/P90/P99, and max latency. CPU/memory usage and longer soak tests are planned.
 - **Client interval**: a 1 ms interval paces the load by default; `-i 0` disables it for saturation throughput tests.
 

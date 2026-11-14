@@ -58,7 +58,7 @@ SerializerManager（JSON / Protobuf）                ServiceManager
 - **服务注册与发现** —— 服务端在 ZooKeeper 命名空间下创建临时节点；会话超时后节点自动摘除，客户端断线重连时重新解析可用实例；ZK 暂时不可用时保留最近一次成功获取的实例列表作为本地缓存兜底。
 - **负载均衡** —— 随机、轮询、加权轮询三种策略，统一接口，可通过配置选择。
 - **可插拔序列化** —— 运行时选择 JSON（`nlohmann/json`）或 Protobuf，并在编译期做类型检查。
-- **压缩与加密** —— 支持可配置级别的 Zstd 压缩；每条消息生成随机会话密钥，使用主密钥封装会话密钥，再加密消息体并 Base64 编码。当前密码学原语为教学用移位实现，生产环境应替换为 **ECDH + AES-256-GCM**。
+- **压缩与加密** —— 支持可配置级别的 Zstd 压缩；每条消息生成随机 256 位会话密钥，使用主密钥封装会话密钥，再使用 **AES-256-GCM**（OpenSSL EVP）加密消息体并 Base64 编码。这是两层对称加密，不是混合加密；生产环境还应增加 **ECDH** 密钥交换、密钥轮换与重放保护。
 - **连接生命周期加固** —— `Connection::state_` 原子化，`Read` / `Write` / `Close` 使用同一把互斥锁，避免“worker 正在写响应、事件循环同时关闭连接”的竞态。
 - **配置化** —— 服务端、客户端、线程池与注册中心配置均在启动时加载，无需重新编译。
 - **优雅关闭** —— 捕获 `SIGINT`/`SIGTERM`，停止事件循环、关闭连接、排空线程池并清理 ZooKeeper。
@@ -69,7 +69,7 @@ SerializerManager（JSON / Protobuf）                ServiceManager
 ### 环境要求
 
 - CMake 3.15+、支持 C++17 的编译器（GCC 9+、Clang 10+）
-- [vcpkg](https://github.com/microsoft/vcpkg)，需安装 `protobuf`、`nlohmann-json`、`spdlog`、`zstd`、`zookeeper`
+- [vcpkg](https://github.com/microsoft/vcpkg)，需安装 `protobuf`、`nlohmann-json`、`spdlog`、`zstd`、`openssl`、`zookeeper`
 - 一个带同步 API 的线程版 ZooKeeper C client（`libzookeeper_mt`）
 - 可用的 ZooKeeper 服务（默认 `localhost:2181`）
 
@@ -241,7 +241,7 @@ utils/            日志与工具函数
 
 - **半包/粘包**：当前协议层按“一次读取即一条完整消息”处理；`message_length` 字段已预留，后续按长度循环读满并补网络字节序转换。
 - **ZooKeeper Watch**：目前依赖临时节点 + 会话超时 + 客户端重连发现，并在 ZK 不可用时使用最近一次成功获取的实例列表兜底；后续增加 Watch 与健康检查，缩短故障摘除时间。
-- **加密原语**：当前为教学用移位实现；生产环境替换为 ECDH + AES-256-GCM，并补充密钥轮换与重放保护。
+- **加密原语**：当前使用 AES-256-GCM（OpenSSL EVP）和演示用主密钥；生产环境应从密钥管理系统读取主密钥，并补充 ECDH 密钥交换、密钥轮换与重放保护。
 - **压测指标**：客户端已输出 QPS / 平均 / P50 / P90 / P99 / 最大延迟；后续补充 CPU / 内存占用与更长时长的稳定性测试。
 - **客户端间隔**：默认每请求间隔 1ms 以控制发包节奏；`-i 0` 可关闭，用于饱和吞吐测试。
 
