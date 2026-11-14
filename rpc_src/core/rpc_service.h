@@ -26,7 +26,7 @@ namespace cookrpc
                     
                     // 创建JSON响应
                     nlohmann::json response;
-                    response["echo"] = "hahah i am rpc server, welcome to C++ training camp, come on";
+                    response["echo"] = "hello from cookrpc server";
                     response["received_message"] = request.value("message", "");
                     
                     // 序列化为字符串返回

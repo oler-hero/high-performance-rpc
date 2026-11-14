@@ -162,7 +162,7 @@ Test conditions: Release build, 50 concurrent clients, `RpcService/Echo`, JSON s
 
 | Environment | Requests | QPS | Average | P50 | P90 | P99 | Success |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Real 2C4G (cgroup 2C/4G) | 1,174,710 | 20,299.82 | 1.39 ms | 1.23 ms | 1.64 ms | 9.36 ms | 100% |
+| Real 2C4G (cgroup 2C/4G) | 1,120,245 | 19,444.65 | 1.51 ms | 1.46 ms | — | 4.47 ms | 100% |
 
 > The gap between P50 and the average shows typical requests are fast; the mean is pulled up by the tail. On 2C4G the tail comes from CPU-quota scheduling and thread-pool queueing.
 
@@ -194,6 +194,8 @@ To check whether the 1 ms interval hides server capacity, a second run removes t
 | No interval (saturated) | 740,467 | 11,827.98 | 4.20 ms | 3.03 ms | 4.05 ms | 28.88 ms | 1.91 / 2 cores | 1.63 / 6 cores |
 
 > Removing the interval lowers QPS and doubles latency: the server already saturates its 2-core quota, while the client uses only 1.63 cores. The 2C4G bottleneck is server CPU, so 12.6k QPS is close to the limit of this configuration rather than an artifact of client pacing.
+
+> Re-measured after the cipher rewrite (current code): no-interval saturation on 2C4G reaches **20,211.75 QPS / 2.45 ms** with the server at 2.0/2 cores; with the 1 ms interval it is 19,444.65 QPS / 1.51 ms. The two are close, so the server CPU bound now sets the ceiling. A micro-benchmark shows per-message key generation dropping from 32.7 µs to 0.49 µs, and per-RPC crypto from about 68 µs to about 3 µs.
 
 ## Engineering notes
 

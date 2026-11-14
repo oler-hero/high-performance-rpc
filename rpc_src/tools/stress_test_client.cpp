@@ -21,6 +21,7 @@ std::atomic<int> total_requests{0};        // 总请求数
 std::atomic<int> success_count{0};         // 成功请求数
 std::atomic<int> error_count{0};           // 失败请求数
 std::atomic<long long> total_response_time{0}; // 总响应时间（微秒）
+std::atomic<int> mismatch_count{0};        // 响应内容校验失败数
 
 // 全量延迟样本（每个线程本地收集，结束后合并，避免逐请求加锁影响测量）
 std::mutex g_latency_mutex;
@@ -95,6 +96,20 @@ void performSingleRequest(RpcClient& client, int request_id, bool verbose,
             SerializeType::JSON, // 序列化类型
             response         // 响应结果
         );
+
+        // 校验响应内容：服务端回显收到的 message，必须与请求一致，
+        // 否则说明分帧/编解码链路有问题，不能把“能解析”当成成功
+        if (success)
+        {
+            const std::string expected = request["message"].get<std::string>();
+            if (!response.contains("received_message") ||
+                !response["received_message"].is_string() ||
+                response["received_message"].get<std::string>() != expected)
+            {
+                mismatch_count.fetch_add(1);
+                success = false;
+            }
+        }
         
         // 记录请求结束时间并计算耗时
         auto end = std::chrono::high_resolution_clock::now();
@@ -357,6 +372,7 @@ int main(int argc, char* argv[]) {
         std::cout << "总请求数: " << total_reqs << std::endl;
         std::cout << "成功请求: " << success << std::endl;
         std::cout << "失败请求: " << errors << std::endl;
+        std::cout << "响应校验失败: " << mismatch_count.load() << std::endl;
         std::cout << "成功率: " << std::fixed << std::setprecision(2) << success_rate << "%" << std::endl;
         std::cout << "QPS: " << std::fixed << std::setprecision(2) << qps << std::endl;
         std::cout << "平均响应时间: " << std::fixed << std::setprecision(2) << avg_response_time << " ms" << std::endl;
