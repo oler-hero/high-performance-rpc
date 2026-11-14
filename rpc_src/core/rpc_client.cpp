@@ -138,8 +138,9 @@ namespace cookrpc
         int ret = connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
         if (ret == 0)
         {
-            // 连接立即成功
-            fcntl(socket_fd, F_SETFL, flags); // 恢复阻塞模式
+            // 连接立即成功：恢复进入本函数前的 flags。
+            // 注意 initSocket 已把该 fd 设为非阻塞，所以这里恢复后仍然是非阻塞。
+            fcntl(socket_fd, F_SETFL, flags);
             return true;
         }
 
@@ -180,7 +181,9 @@ namespace cookrpc
             return false;
         }
 
-        // 恢复阻塞模式
+        // 恢复进入本函数前的 flags。
+        // 注意 initSocket 已把该 fd 设为非阻塞，所以这里恢复后仍然是非阻塞；
+        // 不要改成真正的阻塞模式：Connection::Read 依赖 EAGAIN 判断读完。
         fcntl(socket_fd, F_SETFL, flags);
 
         return true;
